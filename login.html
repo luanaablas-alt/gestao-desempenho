@@ -131,10 +131,7 @@
     });
 
     function traduzirErro(msg) {
-      if (msg.includes('Invalid login'))       return 'E-mail ou senha incorretos.';
-      if (msg.includes('Email not confirmed')) return 'Confirme seu e-mail antes de entrar.';
-      if (msg.includes('Too many requests'))   return 'Muitas tentativas. Aguarde alguns minutos.';
-      return 'Erro ao entrar. Tente novamente.';
+      return 'Erro: ' + msg;
     }
   </script>
 </body>
