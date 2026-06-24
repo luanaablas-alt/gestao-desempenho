@@ -2,7 +2,9 @@
   "version": 2,
   "rewrites": [
     { "source": "/admin", "destination": "/admin/index.html" },
-    { "source": "/gestor", "destination": "/gestor/index.html" }
+    { "source": "/admin/", "destination": "/admin/index.html" },
+    { "source": "/gestor", "destination": "/gestor/index.html" },
+    { "source": "/gestor/", "destination": "/gestor/index.html" }
   ],
   "headers": [
     {
