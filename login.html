@@ -75,7 +75,7 @@
     sb.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
       sb.from('usuarios').select('perfil').eq('id', session.user.id).single().then(({ data: u }) => {
-        if (u) window.location.replace(u.perfil === 'admin' ? '/admin/' : '/gestor/');
+        if (u) window.location.replace(u.perfil === 'admin' ? '/admin/index.html' : '/gestor/index.html');
       });
     });
 
@@ -109,7 +109,7 @@
         return;
       }
 
-      window.location.replace(usuario.perfil === 'admin' ? '/admin/' : '/gestor/');
+      window.location.replace(usuario.perfil === 'admin' ? '/admin/index.html' : '/gestor/index.html');
     });
 
     // Recuperação de senha
