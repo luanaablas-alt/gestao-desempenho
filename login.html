@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestão de Desempenho — Login</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'DM Sans', sans-serif; }</style>
+</head>
+<body class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold text-gray-900">Gestão de Desempenho</h1>
+      <p class="text-gray-500 text-sm mt-1">Acesse sua conta para continuar</p>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label for="email" class="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+          <input id="email" type="email" required autocomplete="email"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="seu@email.com">
+        </div>
+        <div>
+          <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+          <input id="password" type="password" required autocomplete="current-password"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="••••••••">
+        </div>
+
+        <div id="error-msg" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+
+        <button type="submit" id="submit-btn"
+          class="w-full bg-indigo-600 text-white rounded-lg py-2.5 font-semibold hover:bg-indigo-700 transition-colors">
+          Entrar
+        </button>
+      </form>
+
+      <div class="mt-4 text-center">
+        <button onclick="showRecovery()" class="text-sm text-indigo-600 hover:underline">
+          Esqueceu sua senha?
+        </button>
+      </div>
+    </div>
+
+    <div id="recovery-panel" class="hidden mt-4 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+      <h2 class="font-semibold text-gray-800 mb-3">Recuperar Senha</h2>
+      <form id="recovery-form" class="space-y-3">
+        <input id="recovery-email" type="email" required placeholder="seu@email.com"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <div id="recovery-msg" class="hidden text-sm rounded-lg px-3 py-2"></div>
+        <div class="flex gap-2">
+          <button type="submit" class="flex-1 bg-indigo-600 text-white rounded-lg py-2 font-medium">Enviar link</button>
+          <button type="button" onclick="hideRecovery()" class="flex-1 bg-gray-100 text-gray-700 rounded-lg py-2 font-medium">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase } from '/js/supabase.js';
+    import { redirectByRole } from '/js/auth.js';
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const { data: u } = await supabase.from('usuarios').select('perfil').eq('id', session.user.id).single();
+      if (u) redirectByRole(u.perfil);
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn    = document.getElementById('submit-btn');
+      const errEl  = document.getElementById('error-msg');
+      btn.disabled = true;
+      btn.textContent = 'Entrando...';
+      errEl.classList.add('hidden');
+
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        errEl.textContent = traduzirErro(error.message);
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+        return;
+      }
+
+      const { data: usuario } = await supabase
+        .from('usuarios')
+        .select('perfil, ativo')
+        .eq('id', data.user.id)
+        .single();
+
+      if (!usuario?.ativo) {
+        await supabase.auth.signOut();
+        errEl.textContent = 'Conta desativada. Contate o administrador.';
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+        return;
+      }
+
+      redirectByRole(usuario.perfil);
+    });
+
+    document.getElementById('recovery-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('recovery-email').value.trim();
+      const msgEl = document.getElementById('recovery-msg');
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login.html`,
+      });
+
+      if (error) {
+        msgEl.className = 'text-sm rounded-lg px-3 py-2 bg-red-50 text-red-600 border border-red-200';
+        msgEl.textContent = 'Erro ao enviar. Verifique o e-mail.';
+      } else {
+        msgEl.className = 'text-sm rounded-lg px-3 py-2 bg-green-50 text-green-700 border border-green-200';
+        msgEl.textContent = 'Link enviado! Verifique sua caixa de entrada.';
+      }
+      msgEl.classList.remove('hidden');
+    });
+
+    function traduzirErro(msg) {
+      if (msg.includes('Invalid login'))       return 'E-mail ou senha incorretos.';
+      if (msg.includes('Email not confirmed')) return 'Confirme seu e-mail antes de entrar.';
+      if (msg.includes('Too many requests'))   return 'Muitas tentativas. Aguarde alguns minutos.';
+      return 'Erro ao entrar. Tente novamente.';
+    }
+
+    window.showRecovery = () => document.getElementById('recovery-panel').classList.remove('hidden');
+    window.hideRecovery = () => document.getElementById('recovery-panel').classList.add('hidden');
+  </script>
+</body>
+</html>
