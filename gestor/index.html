@@ -220,7 +220,7 @@
         __backendId: r.id, name: r.nome, matricula: r.matricula, role: r.cargo,
         area: r.area, manager: r.manager, checkin_score: Number(r.checkin_score)||0,
         evaluation_score: Number(r.evaluation_score)||0, goal_progress: Number(r.goal_progress)||0,
-        feedback_count: Number(r.feedback_count)||0, feedbacks: r.feedbacks||'[]',
+        feedback_count: Number(r.feedback_count)||0,
         status: r.status, last_checkin_date: r.last_checkin_date,
       }));
       renderTable(allData);
@@ -231,7 +231,7 @@
       return { gestor_id: gestorId, nome: obj.name, matricula: obj.matricula, cargo: obj.role,
         area: obj.area, manager: obj.manager, checkin_score: obj.checkin_score,
         evaluation_score: obj.evaluation_score, goal_progress: obj.goal_progress,
-        feedback_count: obj.feedback_count, feedbacks: obj.feedbacks||'[]',
+        feedback_count: obj.feedback_count,
         status: obj.status, last_checkin_date: obj.last_checkin_date||new Date().toISOString() };
     }
 
@@ -240,7 +240,6 @@
     function getStatus(s)    { return s >= 4 ? 'verde' : s >= 2.5 ? 'amarelo' : 'vermelho'; }
     function statusLabel(s)  { return s==='verde'?'🟢 Destaque':s==='amarelo'?'🟡 Desenvolvimento':'🔴 Risco'; }
     function typeIcon(t)     { return t==='positivo'?'👍':t==='construtivo'?'💡':'⚡'; }
-    function parseFeedbacks(str) { try { return JSON.parse(str||'[]'); } catch { return []; } }
 
     // ── Tabela ────────────────────────────────────────────────
     function renderTable(data) {
@@ -252,7 +251,6 @@
       data.forEach(item => {
         const score = calcScore(item.checkin_score, item.evaluation_score);
         const status = getStatus(score);
-        const feedbacks = parseFeedbacks(item.feedbacks);
         const row = document.createElement('tr');
         row.className = 'border-b hover:bg-gray-50';
         row.dataset.id = item.__backendId;
@@ -279,27 +277,39 @@
         panel.innerHTML = `<td colspan="10" class="px-4 py-4 bg-gray-50 border-b">
           <div class="max-w-2xl">
             <div class="flex items-center justify-between mb-3">
-              <h4 class="font-semibold text-gray-700 text-sm">Feedbacks (${feedbacks.length})</h4>
+              <h4 class="font-semibold text-gray-700 text-sm">Feedbacks</h4>
               <button onclick="openFeedbackModal('${item.__backendId}')" class="text-xs bg-indigo-600 text-white px-3 py-1 rounded-lg flex items-center gap-1"><i data-lucide="plus" style="width:12px;height:12px"></i> Novo</button>
             </div>
-            ${feedbacks.length===0 ? '<p class="text-gray-400 text-xs italic">Nenhum feedback registrado.</p>' :
-              `<div class="space-y-2 max-h-48 overflow-y-auto">${feedbacks.map((fb,i)=>`
-                <div class="bg-white border rounded-lg p-3 flex gap-3 items-start">
-                  <span class="text-lg">${typeIcon(fb.type)}</span>
-                  <div class="flex-1"><div class="flex items-center gap-2"><span class="text-xs font-semibold text-gray-500">${new Date(fb.date).toLocaleDateString('pt-BR')}</span><span class="text-xs px-1.5 py-0.5 rounded ${fb.type==='positivo'?'bg-green-100 text-green-700':fb.type==='construtivo'?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700'}">${fb.type}</span></div><p class="text-sm text-gray-700 mt-1">${fb.description}</p></div>
-                  <button onclick="removeFeedback('${item.__backendId}',${i})" class="text-gray-400 hover:text-red-500"><i data-lucide="x" style="width:14px;height:14px"></i></button>
-                </div>`).join('')}</div>`}
+            <div id="fb-list-${item.__backendId}" class="text-gray-400 text-xs italic">Carregando...</div>
           </div></td>`;
         tbody.appendChild(panel);
       });
       lucide.createIcons();
     }
 
-    window.togglePanel = (id, e) => {
+    async function loadFeedbacksForPanel(colaboradorId) {
+      const { data: fbs } = await sb.from('feedbacks').select('*').eq('colaborador_id', colaboradorId).order('data', { ascending: false });
+      const container = document.getElementById(`fb-list-${colaboradorId}`);
+      if (!container) return;
+      if (!fbs?.length) { container.innerHTML = '<p class="text-gray-400 text-xs italic">Nenhum feedback registrado.</p>'; return; }
+      container.innerHTML = `<div class="space-y-2 max-h-48 overflow-y-auto">${fbs.map(fb=>`
+        <div class="bg-white border rounded-lg p-3 flex gap-3 items-start">
+          <span class="text-lg">${typeIcon(fb.tipo)}</span>
+          <div class="flex-1"><div class="flex items-center gap-2"><span class="text-xs font-semibold text-gray-500">${new Date(fb.data).toLocaleDateString('pt-BR')}</span><span class="text-xs px-1.5 py-0.5 rounded ${fb.tipo==='positivo'?'bg-green-100 text-green-700':fb.tipo==='construtivo'?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700'}">${fb.tipo}</span></div><p class="text-sm text-gray-700 mt-1">${fb.descricao}</p></div>
+          <button onclick="removeFeedback('${fb.id}','${colaboradorId}')" class="text-gray-400 hover:text-red-500"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+        </div>`).join('')}</div>`;
+      lucide.createIcons();
+    }
+
+    window.togglePanel = async (id, e) => {
       e.stopPropagation();
       const p = document.getElementById(`panel-${id}`);
       const icon = document.querySelector(`.ei-${id}`);
-      if (p) { p.classList.toggle('open'); if(icon) icon.style.transform = p.classList.contains('open') ? 'rotate(90deg)' : ''; }
+      if (p) {
+        p.classList.toggle('open');
+        if (icon) icon.style.transform = p.classList.contains('open') ? 'rotate(90deg)' : '';
+        if (p.classList.contains('open')) await loadFeedbacksForPanel(id);
+      }
     };
 
     function updateCounts(data) {
@@ -359,8 +369,8 @@
       const obj = { name: document.getElementById('f-name').value, matricula: document.getElementById('f-matricula').value,
         role: document.getElementById('f-role').value, area: document.getElementById('f-area').value,
         manager: document.getElementById('f-manager').value, checkin_score: ci, evaluation_score: ev,
-        goal_progress: parseInt(document.getElementById('f-goals').value), feedback_count: parseInt(document.getElementById('f-feedback').value),
-        last_checkin_date: new Date().toISOString(), status: getStatus(calcScore(ci,ev)), feedbacks: editingRecord?.feedbacks||'[]' };
+        goal_progress: parseInt(document.getElementById('f-goals').value), feedback_count: parseInt(document.getElementById('f-feedback').value)||0,
+        last_checkin_date: new Date().toISOString(), status: getStatus(calcScore(ci,ev)) };
       const btn = e.target.querySelector('[type=submit]');
       btn.disabled=true; btn.textContent='Salvando...';
       if (editingRecord) { await sb.from('colaboradores').update(toBackend(obj)).eq('id',editingRecord.__backendId).eq('gestor_id',gestorId); }
@@ -386,27 +396,36 @@
     document.getElementById('feedback-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!feedbackTarget) return;
-      const feedbacks = parseFeedbacks(feedbackTarget.feedbacks);
-      feedbacks.push({ type: document.getElementById('fb-type').value, description: document.getElementById('fb-desc').value, date: new Date(document.getElementById('fb-date').value).toISOString() });
       const btn=e.target.querySelector('[type=submit]'); btn.disabled=true; btn.textContent='Salvando...';
-      await sb.from('colaboradores').update({ feedbacks: JSON.stringify(feedbacks), feedback_count: feedbacks.length }).eq('id',feedbackTarget.__backendId).eq('gestor_id',gestorId);
+      await sb.from('feedbacks').insert({
+        colaborador_id: feedbackTarget.__backendId,
+        gestor_id: gestorId,
+        tipo: document.getElementById('fb-type').value,
+        descricao: document.getElementById('fb-desc').value,
+        data: document.getElementById('fb-date').value,
+      });
+      const { count } = await sb.from('feedbacks').select('*', { count: 'exact', head: true }).eq('colaborador_id', feedbackTarget.__backendId);
+      await sb.from('colaboradores').update({ feedback_count: count||0 }).eq('id', feedbackTarget.__backendId);
       btn.disabled=false; btn.textContent='Adicionar';
-      window.closeFeedbackModal(); await loadData();
+      window.closeFeedbackModal();
+      await loadData();
+      await loadFeedbacksForPanel(feedbackTarget.__backendId);
     });
 
-    window.removeFeedback = async (id, index) => {
-      const rec = allData.find(r=>r.__backendId===id); if(!rec)return;
-      const feedbacks = parseFeedbacks(rec.feedbacks); feedbacks.splice(index,1);
-      await sb.from('colaboradores').update({ feedbacks: JSON.stringify(feedbacks), feedback_count: feedbacks.length }).eq('id',id).eq('gestor_id',gestorId);
-      await loadData();
+    window.removeFeedback = async (feedbackId, colaboradorId) => {
+      await sb.from('feedbacks').delete().eq('id', feedbackId);
+      const { count } = await sb.from('feedbacks').select('*', { count: 'exact', head: true }).eq('colaborador_id', colaboradorId);
+      await sb.from('colaboradores').update({ feedback_count: count||0 }).eq('id', colaboradorId);
+      await loadFeedbacksForPanel(colaboradorId);
     };
 
     // ── Relatório ────────────────────────────────────────────
-    window.generateReport = (id) => {
+    window.generateReport = async (id) => {
       const rec=allData.find(r=>r.__backendId===id); if(!rec)return;
-      const score=calcScore(rec.checkin_score,rec.evaluation_score); const status=getStatus(score); const fbs=parseFeedbacks(rec.feedbacks);
+      const { data: fbs } = await sb.from('feedbacks').select('*').eq('colaborador_id', id).order('data', { ascending: false });
+      const score=calcScore(rec.checkin_score,rec.evaluation_score); const status=getStatus(score);
       let r=`RELATÓRIO DE DESEMPENHO\n${'='.repeat(50)}\n\nNome: ${rec.name}\nMatrícula: ${rec.matricula||'N/A'}\nCargo: ${rec.role}\nÁrea: ${rec.area}\nGestor: ${rec.manager}\n\nCheck-in: ${rec.checkin_score.toFixed(1)}/5.0\nAvaliação: ${rec.evaluation_score.toFixed(1)}/5.0\nScore: ${score.toFixed(1)}/5.0\nStatus: ${statusLabel(status)}\nMetas: ${rec.goal_progress}%\n\nFEEDBACKS\n`;
-      if(!fbs.length) r+='Nenhum feedback.\n'; else fbs.forEach((f,i)=>{ r+=`\n${i+1}. ${typeIcon(f.type)} ${f.type.toUpperCase()}\nData: ${new Date(f.date).toLocaleDateString('pt-BR')}\n${f.description}\n`; });
+      if(!fbs?.length) r+='Nenhum feedback.\n'; else fbs.forEach((f,i)=>{ r+=`\n${i+1}. ${typeIcon(f.tipo)} ${f.tipo.toUpperCase()}\nData: ${new Date(f.data).toLocaleDateString('pt-BR')}\n${f.descricao}\n`; });
       r+=`\n${'='.repeat(50)}\nGerado em: ${new Date().toLocaleDateString('pt-BR')}`;
       navigator.clipboard.writeText(r).then(()=>alert('Relatório copiado!')).catch(()=>alert(r));
     };
