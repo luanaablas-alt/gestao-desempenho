@@ -307,7 +307,7 @@
 
       btn.disabled=false; btn.textContent='Criar Gestor';
       if (error || resp?.error) {
-        errEl.textContent = resp?.error || 'Erro ao criar gestor. A Edge Function precisa estar publicada.';
+        errEl.textContent = resp?.error || error?.message || JSON.stringify(error) || 'Erro desconhecido';
         errEl.classList.remove('hidden');
         return;
       }
